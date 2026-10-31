@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.6
+// @version      2.7
 // @description  Ширина, шрифты, фон, неон, AI-note, мысли, копирование, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
@@ -494,8 +494,13 @@
         var last = parseInt(localStorage.getItem('ds_update_at') || '0', 10);
         var now = Date.now();
         var cached = localStorage.getItem('ds_update_latest') || '';
-        if (cached && now - last < 6 * 3600 * 1000) {
+        var CACHE_TTL = 15 * 60 * 1000; // 15 минут, а не 6 часов — чтобы откат версии подхватывался быстро
+        if (cached && now - last < CACHE_TTL) {
             if (dsVerCmp(cached, DS_CURRENT) > 0) dsShowUpdateBtn(cached);
+            else {
+                var b0 = document.getElementById('ds-update-btn');
+                if (b0) b0.classList.remove('ds-show');
+            }
             return;
         }
         function onText(txt) {
@@ -606,7 +611,10 @@
             modal.innerHTML = `
                 <h3 style="margin-top:0; color:#a97af7;">Обновления DeepSeek Tweaks</h3>
                 <div style="font-size:13px; line-height:1.6; margin-bottom:15px; max-height: 60vh; overflow-y: auto; padding-right: 6px; scrollbar-width: thin;">
-                    <b>v2.6 (Сейчас):</b><br>
+                    <b>v2.7 (Сейчас):</b><br>
+                    + 🔧 фикс: кэш проверки обновлений 15 мин + сброс при старте<br>
+                    + 🐾 мяу<br><br>
+                    <b>v2.6:</b><br>
                     + 🐾 мяу (тест кнопки «Обновить»)<br><br>
                     <b>v2.5:</b><br>
                     + 🎨 Фон-анимации: матрица, звёзды, частицы, волны, сияние, боке, неон-сетка, снегопад<br>
@@ -1870,7 +1878,11 @@
         injectHeaderButtons();
         if (typeof dsBgInit === 'function') { dsBgInit(); dsBgApply(); }
         if (typeof showSplash === 'function') showSplash();
-        if (typeof injectUpdateButton === 'function') injectUpdateButton();
+        if (typeof injectUpdateButton === 'function') {
+            // сброс кэша при старте, чтобы проверить GitHub заново (а не ждать 15 минут)
+            localStorage.removeItem('ds_update_at');
+            injectUpdateButton();
+        }
         
         setInterval(() => {
             if (!document.getElementById('ds-header-tools')) {
@@ -1888,6 +1900,7 @@
             ensureEmojiButton();
             ensureScrollTopBtn();
             injectUpdateButton();
+            if (typeof dsCheckUpdate === 'function' && !window._dsUpdChecked) { window._dsUpdChecked = true; dsCheckUpdate(); }
         }, 1000);
         
         if (settings.autoGrow) {
