@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.5
+// @version      2.6
 // @description  Ширина, шрифты, фон, неон, AI-note, мысли, копирование, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
@@ -605,8 +605,10 @@
             modal.style.cssText = `position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1e1e2e; color: #e8eaed; padding: 20px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.7); z-index: 100000; width: 400px; border: 1px solid #a97af7; font-family: 'Segoe UI', sans-serif;`;
             modal.innerHTML = `
                 <h3 style="margin-top:0; color:#a97af7;">Обновления DeepSeek Tweaks</h3>
-                <div style="font-size:13px; line-height:1.6; margin-bottom:15px;">
-                    <b>v2.5 (Сейчас):</b><br>
+                <div style="font-size:13px; line-height:1.6; margin-bottom:15px; max-height: 60vh; overflow-y: auto; padding-right: 6px; scrollbar-width: thin;">
+                    <b>v2.6 (Сейчас):</b><br>
+                    + 🐾 мяу (тест кнопки «Обновить»)<br><br>
+                    <b>v2.5:</b><br>
                     + 🎨 Фон-анимации: матрица, звёзды, частицы, волны, сияние, боке, неон-сетка, снегопад<br>
                     + Прозрачность фона (5-50%)<br>
                     + ✨ Мини-заставка «DSeek+» при открытии (1.2с, раз за сессию)<br><br>
@@ -628,7 +630,7 @@
                     + Compact mode — плотнее сообщения<br>
                     + Sticky header — шапка прилипает<br>
                     + Кастомный скроллбар в цвет неона<br><br>
-                    <b>v2.1:</b><br>+ Пофикшено удаление поля ввода<br>+ Пофикшено сворачивание мыслей<br><br><b>v2.0:</b><br>+ Попытка починить AI-note и мысли
+                    <b>v2.1:</b><br>+ Пофикшено удаление поля ввода<br>+ Пофикшено сворачивание мыслей<br><br><br><b>v2.0:</b><br>+ Попытка починить AI-note и мысли
                 </div>
                 <button onclick="document.getElementById('ds-changelog-modal').remove()" style="background:#a97af7; color:#fff; border:none; padding:8px 15px; border-radius:6px; cursor:pointer;">Закрыть</button>
             `;
