@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.7
+// @version      2.8
 // @description  Ширина, шрифты, фон, неон, AI-note, мысли, копирование, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
@@ -489,6 +489,7 @@
     }
 
     function dsCheckUpdate() {
+        console.log('[ds-tweaks] checkUpdate: current=' + DS_CURRENT + ', updateCheck=' + settings.updateCheck + ', GM_xmlhttpRequest=' + (typeof GM_xmlhttpRequest));
         if (!settings.updateCheck) return;
         var last = parseInt(localStorage.getItem('ds_update_at') || '0', 10);
         var now = Date.now();
@@ -499,11 +500,13 @@
         }
         function onText(txt) {
             localStorage.setItem('ds_update_at', String(Date.now()));
+            console.log('[ds-tweaks] checkUpdate: got ' + (txt ? txt.length + ' bytes' : 'empty'));
             if (!txt) return;
             var m = txt.match(/@version\s+([\d.]+)/);
             if (!m) return;
             var latest = m[1];
             localStorage.setItem('ds_update_latest', latest);
+            console.log('[ds-tweaks] checkUpdate: latest=' + latest + ', cmp=' + dsVerCmp(latest, DS_CURRENT));
             if (dsVerCmp(latest, DS_CURRENT) > 0) dsShowUpdateBtn(latest);
             else {
                 var b = document.getElementById('ds-update-btn');
@@ -536,6 +539,7 @@
 
     function dsShowUpdateBtn(latest) {
         var btn = document.getElementById('ds-update-btn');
+        console.log('[ds-tweaks] showUpdateBtn: btn=' + (btn ? 'found' : 'NULL') + ', latest=' + latest);
         if (!btn) return;
         btn.classList.add('ds-show');
         btn.title = 'Доступно обновление: v' + latest + ' (у тебя v' + DS_CURRENT + '). Нажми — откроется установка в Tampermonkey.';
