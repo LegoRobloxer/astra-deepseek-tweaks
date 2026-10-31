@@ -5,6 +5,8 @@
 // @description  Ширина, шрифты, фон, неон, AI-note, мысли, копирование, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
+// @grant        GM_xmlhttpRequest
+// @connect      raw.githubusercontent.com
 // @updateURL    https://raw.githubusercontent.com/LegoRobloxer/astra-deepseek-tweaks/main/deepseek_tweaks.user.js
 // @downloadURL  https://raw.githubusercontent.com/LegoRobloxer/astra-deepseek-tweaks/main/deepseek_tweaks.user.js
 // @grant        none
@@ -464,7 +466,13 @@
     // === v2.6: проверка обновлений с GitHub ===
     var DS_RAW_URL = 'https://raw.githubusercontent.com/LegoRobloxer/astra-deepseek-tweaks/main/deepseek_tweaks.user.js';
     var DS_CURRENT = (function() {
-        try { return GM_info.script.version; } catch (e) { return '2.6'; }
+        try {
+            if (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) {
+                return GM_info.script.version;
+            }
+        } catch (e) {}
+        // fallback: читаем @version из своего же файла — но проще взять 2.7
+        return '2.7';
     })();
 
     function dsParseVer(s) {
@@ -489,22 +497,41 @@
             if (dsVerCmp(cached, DS_CURRENT) > 0) dsShowUpdateBtn(cached);
             return;
         }
-        fetch(DS_RAW_URL + '?t=' + now, { cache: 'no-store' })
-            .then(function(r) { return r.ok ? r.text() : null; })
-            .then(function(txt) {
-                if (!txt) return;
-                var m = txt.match(/@version\s+([\d.]+)/);
-                if (!m) return;
-                var latest = m[1];
-                localStorage.setItem('ds_update_latest', latest);
-                localStorage.setItem('ds_update_at', String(now));
-                if (dsVerCmp(latest, DS_CURRENT) > 0) dsShowUpdateBtn(latest);
-                else {
-                    var b = document.getElementById('ds-update-btn');
-                    if (b) b.classList.remove('ds-show');
-                }
-            })
-            .catch(function(e) { console.warn('[ds-tweaks] update check failed', e); });
+        function onText(txt) {
+            localStorage.setItem('ds_update_at', String(Date.now()));
+            if (!txt) return;
+            var m = txt.match(/@version\s+([\d.]+)/);
+            if (!m) return;
+            var latest = m[1];
+            localStorage.setItem('ds_update_latest', latest);
+            if (dsVerCmp(latest, DS_CURRENT) > 0) dsShowUpdateBtn(latest);
+            else {
+                var b = document.getElementById('ds-update-btn');
+                if (b) b.classList.remove('ds-show');
+            }
+        }
+        function onFail(e) {
+            // записать время попытки, чтобы не долбить GitHub каждую секунду
+            localStorage.setItem('ds_update_at', String(Date.now()));
+            console.warn('[ds-tweaks] update check failed', e);
+        }
+        try {
+            if (typeof GM_xmlhttpRequest === 'function') {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: DS_RAW_URL + '?t=' + now,
+                    timeout: 15000,
+                    onload: function(r) { onText(r.status === 200 ? r.responseText : null); },
+                    onerror: function(e) { onFail(e); },
+                    ontimeout: function(e) { onFail(e); }
+                });
+            } else {
+                fetch(DS_RAW_URL + '?t=' + now, { cache: 'no-store' })
+                    .then(function(r) { return r.ok ? r.text() : null; })
+                    .then(onText)
+                    .catch(onFail);
+            }
+        } catch (e) { onFail(e); }
     }
 
     function dsShowUpdateBtn(latest) {
