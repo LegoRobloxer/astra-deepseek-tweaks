@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.8
+// @version      2.5
 // @description  Ширина, шрифты, фон, неон, AI-note, мысли, копирование, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
@@ -606,11 +606,7 @@
             modal.innerHTML = `
                 <h3 style="margin-top:0; color:#a97af7;">Обновления DeepSeek Tweaks</h3>
                 <div style="font-size:13px; line-height:1.6; margin-bottom:15px;">
-                    <b>v2.7 (Сейчас):</b><br>
-                    + 🐾 мяуу (тест кнопки «Обновить»)<br><br>
-                    <b>v2.6:</b><br>
-                    + 🐾 мяу (тест автообновления)<br><br>
-                    <b>v2.5:</b><br>
+                    <b>v2.5 (Сейчас):</b><br>
                     + 🎨 Фон-анимации: матрица, звёзды, частицы, волны, сияние, боке, неон-сетка, снегопад<br>
                     + Прозрачность фона (5-50%)<br>
                     + ✨ Мини-заставка «DSeek+» при открытии (1.2с, раз за сессию)<br><br>
