@@ -31,6 +31,8 @@
         stickyHeader: false,
         scrollBottom: true,
         charCounter: true,
+        contextLimit: 128000,
+        contextWarn: 70,
         copyCode: true,
         hideNativeScroll: false,
         exportChat: true,
@@ -257,7 +259,9 @@
 
         // Счётчик символов
         css += `
-            #ds-char-counter { position: fixed !important; right: 24px !important; bottom: 24px !important; background: rgba(20,22,26,0.9) !important; color: #8a919b !important; padding: 4px 10px !important; border-radius: 12px !important; font-size: 11px !important; font-family: 'Segoe UI', sans-serif !important; border: 1px solid rgba(169,122,247,0.3) !important; z-index: 99998 !important; pointer-events: none !important; }
+            #ds-char-counter { position: fixed !important; right: 24px !important; bottom: 24px !important; background: rgba(20,22,26,0.9) !important; color: #8a919b !important; padding: 4px 10px !important; border-radius: 12px !important; font-size: 11px !important; font-family: 'Segoe UI', sans-serif !important; border: 1px solid rgba(169,122,247,0.3) !important; z-index: 99998 !important; pointer-events: none !important; transition: color .2s, border-color .2s, box-shadow .2s !important; }
+            #ds-char-counter.ds-warn { color: #ffd43b !important; border-color: rgba(255,212,59,0.7) !important; box-shadow: 0 0 8px rgba(255,212,59,0.3) !important; }
+            #ds-char-counter.ds-hard { color: #ff6b6b !important; border-color: rgba(255,107,107,0.85) !important; box-shadow: 0 0 10px rgba(255,107,107,0.4) !important; }
         `;
 
         // === v2.4: эмодзи-пикер ===
@@ -407,7 +411,9 @@
             <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-sticky" ${settings.stickyHeader?'checked':''}> Sticky header</label>
             <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-copy" ${settings.copyCode?'checked':''}> Копировать код</label>
             <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-scroll" ${settings.scrollBottom?'checked':''}> Кнопка «вниз»</label>
-            <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-counter" ${settings.charCounter?'checked':''}> Счётчик символов</label>
+            <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-counter" ${settings.charCounter?'checked':''}> Счётчик символов + контекст</label>
+            <div style="margin:6px 0;"><label style="font-size:11px; color:#8a919b;">Лимит контекста (токенов):</label><br><input type="number" id="ds-ctx-limit" value="${settings.contextLimit||128000}" min="1000" step="1000" style="width:100%; background:#14161a; color:#e8eaed; border:1px solid rgba(169,122,247,0.3); border-radius:4px; padding:3px 6px; font-size:12px; box-sizing:border-box;"></div>
+            <div style="margin:6px 0;"><label style="font-size:11px; color:#8a919b;">Порог предупреждения (%):</label><br><input type="number" id="ds-ctx-warn" value="${settings.contextWarn||70}" min="10" max="99" step="5" style="width:100%; background:#14161a; color:#e8eaed; border:1px solid rgba(169,122,247,0.3); border-radius:4px; padding:3px 6px; font-size:12px; box-sizing:border-box;"></div>
             <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-emoji" ${settings.emojiPicker?'checked':''}> Эмодзи-пикер</label>
             <div style="margin:6px 0;"><label style="font-size:12px; color:#8a919b;">Фон-анимация:</label><br><select id="ds-bg-anim" style="width:100%; background:#14161a; color:#e8eaed; border:1px solid rgba(169,122,247,.3); border-radius:6px; padding:3px 6px; font-size:12px; box-sizing:border-box;"><option value="none">нет</option><option value="matrix">матрица</option><option value="stars">звёзды</option><option value="particles">частицы</option><option value="waves">волны</option><option value="aurora">сияние</option><option value="bokeh">боке</option><option value="grid">неон-сетка</option><option value="snow">снегопад</option></select></div>
             <div style="margin:6px 0;"><label style="font-size:12px; color:#8a919b;">Прозрачность фона: <b id="ds-bg-op-val">${settings.bgOpacity||18}%</b></label><br><input type="range" id="ds-bg-op" min="5" max="50" value="${settings.bgOpacity||18}" style="width:100%;"></div>
@@ -434,6 +440,10 @@
         document.getElementById('ds-copy').onchange = (e) => { settings.copyCode = e.target.checked; save(); };
         document.getElementById('ds-scroll').onchange = (e) => { settings.scrollBottom = e.target.checked; save(); };
         document.getElementById('ds-counter').onchange = (e) => { settings.charCounter = e.target.checked; save(); };
+        var _ctxLimitEl = document.getElementById('ds-ctx-limit');
+        if (_ctxLimitEl) _ctxLimitEl.onchange = (e) => { var v = parseInt(e.target.value, 10); if (v > 0) { settings.contextLimit = v; save(); updateCharCounter(); } };
+        var _ctxWarnEl = document.getElementById('ds-ctx-warn');
+        if (_ctxWarnEl) _ctxWarnEl.onchange = (e) => { var v = parseInt(e.target.value, 10); if (v >= 10 && v <= 99) { settings.contextWarn = v; save(); updateCharCounter(); } };
         document.getElementById('ds-emoji').onchange = (e) => { settings.emojiPicker = e.target.checked; save(); };
         document.getElementById('ds-bg-anim').value = settings.bgAnim || 'none';
         document.getElementById('ds-bg-anim').onchange = (e) => { settings.bgAnim = e.target.value; save(); if (typeof dsBgApply === 'function') dsBgApply(); };
@@ -795,7 +805,15 @@
             total += (m.innerText || '').length;
         });
         const fmt = total.toLocaleString('ru-RU').replace(/,/g, ' ');
-        el.textContent = fmt + ' симв.';
+        const estTok = Math.round(total / 2.7);
+        const limit = (settings.contextLimit && settings.contextLimit > 0) ? settings.contextLimit : 128000;
+        const pct = (estTok / limit) * 100;
+        const warn = (settings.contextWarn && settings.contextWarn > 0) ? settings.contextWarn : 70;
+        const tokFmt = estTok >= 1000 ? (estTok / 1000).toFixed(1) + 'K' : String(estTok);
+        const limFmt = limit >= 1000 ? (limit / 1000).toFixed(0) + 'K' : String(limit);
+        el.textContent = fmt + ' симв · ' + tokFmt + '/' + limFmt + ' · ' + pct.toFixed(1) + '%';
+        el.classList.toggle('ds-warn', pct >= warn && pct < 90);
+        el.classList.toggle('ds-hard', pct >= 90);
     }
 
     // Ядерная синхронизация: читаем чекбоксы прямо из DOM.
