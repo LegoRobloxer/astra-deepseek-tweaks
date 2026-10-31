@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.7
+// @version      2.8
 // @description  Ширина, шрифты, фон, неон, AI-note, мысли, копирование, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
+// @connect      127.0.0.1
+// @connect      localhost
 // @updateURL    https://raw.githubusercontent.com/LegoRobloxer/astra-deepseek-tweaks/main/deepseek_tweaks.user.js
 // @downloadURL  https://raw.githubusercontent.com/LegoRobloxer/astra-deepseek-tweaks/main/deepseek_tweaks.user.js
 // @grant        none
@@ -799,21 +801,70 @@
             el.id = 'ds-char-counter';
             document.body.appendChild(el);
         }
-        // Считаем видимый текст сообщений
+        // Считаем видимый текст — fallback, если мост недоступен
         let total = 0;
         document.querySelectorAll('[class*="markdown"], [class*="message-content"]').forEach(m => {
             total += (m.innerText || '').length;
         });
-        const fmt = total.toLocaleString('ru-RU').replace(/,/g, ' ');
-        const estTok = Math.round(total / 2.7);
-        const limit = (settings.contextLimit && settings.contextLimit > 0) ? settings.contextLimit : 128000;
-        const pct = (estTok / limit) * 100;
         const warn = (settings.contextWarn && settings.contextWarn > 0) ? settings.contextWarn : 70;
-        const tokFmt = estTok >= 1000 ? (estTok / 1000).toFixed(1) + 'K' : String(estTok);
-        const limFmt = limit >= 1000 ? (limit / 1000).toFixed(0) + 'K' : String(limit);
-        el.textContent = fmt + ' симв · ' + tokFmt + '/' + limFmt + ' · ' + pct.toFixed(1) + '%';
-        el.classList.toggle('ds-warn', pct >= warn && pct < 90);
-        el.classList.toggle('ds-hard', pct >= 90);
+
+        function _renderCtx(chars, tokens, limitChars, source) {
+            const tokLimit = Math.round(limitChars / 2.7);
+            const fmtC = chars.toLocaleString('ru-RU').replace(/,/g, ' ');
+            const tokFmt = tokens >= 1000 ? (tokens / 1000).toFixed(1) + 'K' : String(tokens);
+            const limFmt = tokLimit >= 1000000 ? (tokLimit / 1000000).toFixed(1) + 'M' : (tokLimit >= 1000 ? (tokLimit / 1000).toFixed(0) + 'K' : String(tokLimit));
+            const pct = tokLimit > 0 ? (tokens / tokLimit) * 100 : 0;
+            el.textContent = fmtC + ' симв · ' + tokFmt + '/' + limFmt + ' tok · ' + pct.toFixed(1) + '%' + (source === 'dom' ? ' (видимая)' : '');
+            el.classList.toggle('ds-warn', pct >= warn && pct < 90);
+            el.classList.toggle('ds-hard', pct >= 90);
+            el.title = source === 'server' ? 'данные из /health моста' : 'приблизительно, по видимому DOM';
+        }
+
+        const _now = Date.now();
+        if (_ctxCache.data && (_now - _ctxCache.at) < 4000) {
+            _renderCtx(_ctxCache.data.chat_chars || 0, _ctxCache.data.est_tokens || 0, _ctxCache.data.limit || 2700000, 'server');
+            return;
+        }
+
+        if (!_ctxCache.inflight) {
+            _ctxCache.inflight = true;
+            _fetchHealthCtx(function (ctx) {
+                _ctxCache.inflight = false;
+                if (ctx) {
+                    _ctxCache.at = Date.now();
+                    _ctxCache.data = ctx;
+                    _renderCtx(ctx.chat_chars || 0, ctx.est_tokens || 0, ctx.limit || 2700000, 'server');
+                } else {
+                    const limit = (settings.contextLimit && settings.contextLimit > 0) ? settings.contextLimit : 128000;
+                    _renderCtx(total, Math.round(total / 2.7), limit * 2.7, 'dom');
+                }
+            });
+        } else if (_ctxCache.data) {
+            _renderCtx(_ctxCache.data.chat_chars || 0, _ctxCache.data.est_tokens || 0, _ctxCache.data.limit || 2700000, 'server');
+        } else {
+            const limit = (settings.contextLimit && settings.contextLimit > 0) ? settings.contextLimit : 128000;
+            _renderCtx(total, Math.round(total / 2.7), limit * 2.7, 'dom');
+        }
+    }
+
+    // Кэш и загрузчик /health (мост Agent Bridge)
+    var _ctxCache = { at: 0, data: null, inflight: false };
+    var _HEALTH_URL = 'http://127.0.0.1:8766/health';
+    function _fetchHealthCtx(cb) {
+        if (typeof GM_xmlhttpRequest !== 'function') { cb(null); return; }
+        try {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: _HEALTH_URL,
+                timeout: 3000,
+                onload: function (r) {
+                    try { var d = JSON.parse(r.responseText); cb((d && d.ctx) ? d.ctx : null); }
+                    catch (e) { cb(null); }
+                },
+                onerror: function () { cb(null); },
+                ontimeout: function () { cb(null); }
+            });
+        } catch (e) { cb(null); }
     }
 
     // Ядерная синхронизация: читаем чекбоксы прямо из DOM.
