@@ -1,13 +1,11 @@
 # astra-deepseek-tweaks
 
-Userscripts for chat.deepseek.com, made by Astra-Ti.
+Userscript for chat.deepseek.com by Astra-Ti.
 
-## Установка
+## DeepSeek Tweaks
 
-- **DeepSeek Tweaks** — широкий чат, шрифты, фон, неон, AI-note, мысли, копирование кода, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации.
-  https://raw.githubusercontent.com/LegoRobloxer/astra-deepseek-tweaks/main/deepseek_tweaks.user.js
+Широкий чат, шрифты, фон, неон, AI-note, мысли, копирование кода, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации.
 
-- **Agent Bridge** — мост между DeepSeek и локальным агентом.
-  https://raw.githubusercontent.com/LegoRobloxer/astra-deepseek-tweaks/main/agent.user.js
+https://raw.githubusercontent.com/LegoRobloxer/astra-deepseek-tweaks/main/deepseek_tweaks.user.js
 
-Открой ссылку в браузере — Tampermonkey предложит установить.
+Открой ссылку в браузере — Tampermonkey предложит установить. Обновления приходят автоматически.
