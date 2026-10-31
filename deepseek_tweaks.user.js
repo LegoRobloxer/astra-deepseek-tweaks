@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.8
+// @version      2.9
 // @description  Ширина, шрифты, фон, неон, AI-note, мысли, копирование, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
@@ -11,7 +11,6 @@
 // @connect      localhost
 // @updateURL    https://raw.githubusercontent.com/LegoRobloxer/astra-deepseek-tweaks/main/deepseek_tweaks.user.js
 // @downloadURL  https://raw.githubusercontent.com/LegoRobloxer/astra-deepseek-tweaks/main/deepseek_tweaks.user.js
-// @grant        none
 // ==/UserScript==
 
 (function() {
