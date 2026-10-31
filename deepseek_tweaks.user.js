@@ -35,6 +35,7 @@
         chatSearch: true,
         branding: true,
         emojiPicker: true,
+        updateCheck: true,
         bgAnim: 'none',
         bgOpacity: 18,
         siteTitle: 'DSeek+',
@@ -129,6 +130,21 @@
             }
             .ds-header-btn { cursor: pointer; font-size: 18px; opacity: 0.7; transition: opacity 0.2s, transform 0.2s; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; }
             .ds-header-btn:hover { opacity: 1; transform: scale(1.1); background: rgba(255,255,255,0.1); }
+
+            /* v2.6: кнопка «Обновить» в нашем стиле */
+            .ds-update-btn { display: none !important; align-items: center !important; gap: 6px !important; padding: 5px 10px !important; border-radius: 16px !important;
+                cursor: pointer !important; font: 600 12px/1 'Segoe UI', sans-serif !important; white-space: nowrap !important;
+                color: ${settings.neonColor || '#a97af7'} !important; background: rgba(20,22,26,.85) !important;
+                border: 1.5px solid ${settings.neonColor || '#a97af7'} !important;
+                box-shadow: 0 0 6px ${settings.neonColor || '#a97af7'}, 0 0 12px rgba(169,122,247,.4) !important;
+                transition: transform .15s, box-shadow .2s !important; animation: ds-update-pulse 2.2s ease-in-out infinite !important; }
+            .ds-update-btn.ds-show { display: inline-flex !important; }
+            .ds-update-btn:hover { transform: scale(1.06) !important; box-shadow: 0 0 10px ${settings.neonColor || '#a97af7'}, 0 0 22px rgba(169,122,247,.7) !important; animation-play-state: paused !important; }
+            .ds-update-btn:active { transform: scale(.96) !important; }
+            .ds-update-btn .ds-update-dot { width: 8px !important; height: 8px !important; border-radius: 50% !important; background: ${settings.neonColor || '#a97af7'} !important;
+                box-shadow: 0 0 6px ${settings.neonColor || '#a97af7'} !important; animation: ds-update-blink 1.4s ease-in-out infinite !important; }
+            @keyframes ds-update-pulse { 0%, 100% { box-shadow: 0 0 6px ${settings.neonColor || '#a97af7'}, 0 0 12px rgba(169,122,247,.4); } 50% { box-shadow: 0 0 10px ${settings.neonColor || '#a97af7'}, 0 0 22px rgba(169,122,247,.7); } }
+            @keyframes ds-update-blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
         `;
 
         // === v2.2: безопасные фичи ===
@@ -443,6 +459,84 @@
             reader.readAsDataURL(file);
         };
         document.getElementById('ds-bg-clear').onclick = () => { settings.bgImage = ''; save(); };
+    }
+
+    // === v2.6: проверка обновлений с GitHub ===
+    var DS_RAW_URL = 'https://raw.githubusercontent.com/LegoRobloxer/astra-deepseek-tweaks/main/deepseek_tweaks.user.js';
+    var DS_CURRENT = (function() {
+        try { return GM_info.script.version; } catch (e) { return '2.6'; }
+    })();
+
+    function dsParseVer(s) {
+        return String(s || '').split('.').map(function(x) { return parseInt(x, 10) || 0; });
+    }
+
+    function dsVerCmp(a, b) {
+        var x = dsParseVer(a), y = dsParseVer(b);
+        for (var i = 0; i < Math.max(x.length, y.length); i++) {
+            var d = (x[i] || 0) - (y[i] || 0);
+            if (d) return d;
+        }
+        return 0;
+    }
+
+    function dsCheckUpdate() {
+        if (!settings.updateCheck) return;
+        var last = parseInt(localStorage.getItem('ds_update_at') || '0', 10);
+        var now = Date.now();
+        var cached = localStorage.getItem('ds_update_latest') || '';
+        if (cached && now - last < 6 * 3600 * 1000) {
+            if (dsVerCmp(cached, DS_CURRENT) > 0) dsShowUpdateBtn(cached);
+            return;
+        }
+        fetch(DS_RAW_URL + '?t=' + now, { cache: 'no-store' })
+            .then(function(r) { return r.ok ? r.text() : null; })
+            .then(function(txt) {
+                if (!txt) return;
+                var m = txt.match(/@version\s+([\d.]+)/);
+                if (!m) return;
+                var latest = m[1];
+                localStorage.setItem('ds_update_latest', latest);
+                localStorage.setItem('ds_update_at', String(now));
+                if (dsVerCmp(latest, DS_CURRENT) > 0) dsShowUpdateBtn(latest);
+                else {
+                    var b = document.getElementById('ds-update-btn');
+                    if (b) b.classList.remove('ds-show');
+                }
+            })
+            .catch(function(e) { console.warn('[ds-tweaks] update check failed', e); });
+    }
+
+    function dsShowUpdateBtn(latest) {
+        var btn = document.getElementById('ds-update-btn');
+        if (!btn) return;
+        btn.classList.add('ds-show');
+        btn.title = 'Доступно обновление: v' + latest + ' (у тебя v' + DS_CURRENT + '). Нажми — откроется установка в Tampermonkey.';
+    }
+
+    function injectUpdateButton() {
+        if (!settings.updateCheck) {
+            var old = document.getElementById('ds-update-btn');
+            if (old) old.remove();
+            return;
+        }
+        var tools = document.getElementById('ds-header-tools');
+        if (!tools) return;
+        if (tools.querySelector('#ds-update-btn')) return;
+        var btn = document.createElement('div');
+        btn.id = 'ds-update-btn';
+        btn.className = 'ds-update-btn';
+        btn.innerHTML = '<span class="ds-update-dot"></span><span>Обновить</span>';
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            window.open(DS_RAW_URL, '_blank', 'noopener');
+        });
+        tools.insertBefore(btn, tools.firstChild);
+        // если уже знаем, что есть обновление — показать сразу
+        var cached = localStorage.getItem('ds_update_latest') || '';
+        if (cached && dsVerCmp(cached, DS_CURRENT) > 0) dsShowUpdateBtn(cached);
+        // принудительно проверить при вставке
+        setTimeout(dsCheckUpdate, 300);
     }
 
     function injectHeaderButtons() {
@@ -1745,6 +1839,7 @@
         injectHeaderButtons();
         if (typeof dsBgInit === 'function') { dsBgInit(); dsBgApply(); }
         if (typeof showSplash === 'function') showSplash();
+        if (typeof injectUpdateButton === 'function') injectUpdateButton();
         
         setInterval(() => {
             if (!document.getElementById('ds-header-tools')) {
@@ -1761,6 +1856,7 @@
             applyBranding();
             ensureEmojiButton();
             ensureScrollTopBtn();
+            injectUpdateButton();
         }, 1000);
         
         if (settings.autoGrow) {
