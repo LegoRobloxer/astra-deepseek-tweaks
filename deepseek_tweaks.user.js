@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.11
+// @version      2.12
 // @description  Ширина, шрифты, фон, неон, AI-note, мысли, копирование, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
@@ -265,7 +265,9 @@
         // Счётчик символов
         css += `
             #ds-char-counter { position: fixed !important; right: 24px !important; bottom: 24px !important; background: rgba(20,22,26,0.9) !important; color: #8a919b !important; padding: 4px 10px !important; border-radius: 12px !important; font-size: 11px !important; font-family: 'Segoe UI', sans-serif !important; border: 1px solid rgba(169,122,247,0.3) !important; z-index: 99998 !important; pointer-events: none !important; transition: color .2s, border-color .2s, box-shadow .2s !important; }
+            #ds-char-counter.ds-ok { color: #4ade80 !important; border-color: rgba(74,222,128,0.55) !important; box-shadow: 0 0 8px rgba(74,222,128,0.25) !important; }
             #ds-char-counter.ds-warn { color: #ffd43b !important; border-color: rgba(255,212,59,0.7) !important; box-shadow: 0 0 8px rgba(255,212,59,0.3) !important; }
+            #ds-char-counter.ds-orange { color: #fb923c !important; border-color: rgba(251,146,60,0.75) !important; box-shadow: 0 0 9px rgba(251,146,60,0.35) !important; }
             #ds-char-counter.ds-hard { color: #ff6b6b !important; border-color: rgba(255,107,107,0.85) !important; box-shadow: 0 0 10px rgba(255,107,107,0.4) !important; }
             #ds-input-counter { position: absolute !important; right: 8px !important; bottom: 50px !important; background: rgba(20,22,26,0.85) !important; color: #8a919b !important; padding: 2px 7px !important; border-radius: 9px !important; font-size: 10px !important; font-family: Segoe UI,sans-serif !important; border: 1px solid rgba(169,122,247,0.25) !important; z-index: 99997 !important; pointer-events: none !important; transition: color .2s !important; }
             #ds-input-counter.ds-iwarn { color: #ffd43b !important; }
@@ -830,7 +832,9 @@
             const limFmt = tokLimit >= 1000000 ? (tokLimit / 1000000).toFixed(1) + 'M' : (tokLimit >= 1000 ? (tokLimit / 1000).toFixed(0) + 'K' : String(tokLimit));
             const pct = tokLimit > 0 ? (tokens / tokLimit) * 100 : 0;
             el.textContent = fmtC + ' симв · ' + tokFmt + '/' + limFmt + ' tok · ' + pct.toFixed(1) + '%' + (source === 'dom' ? ' (видимая)' : '');
-            el.classList.toggle('ds-warn', pct >= warn && pct < 90);
+            el.classList.toggle('ds-ok', pct < 50);
+            el.classList.toggle('ds-warn', pct >= 50 && pct < 75);
+            el.classList.toggle('ds-orange', pct >= 75 && pct < 90);
             el.classList.toggle('ds-hard', pct >= 90);
             el.title = source === 'server' ? 'данные из /health моста' : 'приблизительно, по видимому DOM';
         }
