@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.12
-// @description  Ширина, шрифты, фон, неон, AI-note, мысли, копирование, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации
+// @version      2.13
+// @description  Монитор контекста (4 зоны цвета), счётчик токенов в поле ввода, автосохранение промптов + экспорт, ширина, шрифты, фон, неон, compact, поиск, брендинг, эмодзи
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
 // @grant        GM_xmlhttpRequest
