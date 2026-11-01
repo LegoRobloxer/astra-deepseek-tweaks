@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.9
+// @version      2.11
 // @description  Ширина, шрифты, фон, неон, AI-note, мысли, копирование, счётчик, compact, поиск, экспорт, брендинг, эмодзи, анимации
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_setValue
+// @grant        GM_getValue
 // @connect      raw.githubusercontent.com
 // @connect      127.0.0.1
 // @connect      localhost
@@ -34,6 +36,8 @@
         charCounter: true,
         contextLimit: 128000,
         contextWarn: 70,
+        inputCounter: true,
+        promptSave: true,
         copyCode: true,
         hideNativeScroll: false,
         exportChat: true,
@@ -263,6 +267,9 @@
             #ds-char-counter { position: fixed !important; right: 24px !important; bottom: 24px !important; background: rgba(20,22,26,0.9) !important; color: #8a919b !important; padding: 4px 10px !important; border-radius: 12px !important; font-size: 11px !important; font-family: 'Segoe UI', sans-serif !important; border: 1px solid rgba(169,122,247,0.3) !important; z-index: 99998 !important; pointer-events: none !important; transition: color .2s, border-color .2s, box-shadow .2s !important; }
             #ds-char-counter.ds-warn { color: #ffd43b !important; border-color: rgba(255,212,59,0.7) !important; box-shadow: 0 0 8px rgba(255,212,59,0.3) !important; }
             #ds-char-counter.ds-hard { color: #ff6b6b !important; border-color: rgba(255,107,107,0.85) !important; box-shadow: 0 0 10px rgba(255,107,107,0.4) !important; }
+            #ds-input-counter { position: absolute !important; right: 8px !important; bottom: 50px !important; background: rgba(20,22,26,0.85) !important; color: #8a919b !important; padding: 2px 7px !important; border-radius: 9px !important; font-size: 10px !important; font-family: Segoe UI,sans-serif !important; border: 1px solid rgba(169,122,247,0.25) !important; z-index: 99997 !important; pointer-events: none !important; transition: color .2s !important; }
+            #ds-input-counter.ds-iwarn { color: #ffd43b !important; }
+            #ds-input-counter.ds-ihard { color: #ff6b6b !important; }
         `;
 
         // === v2.4: эмодзи-пикер ===
@@ -413,6 +420,9 @@
             <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-copy" ${settings.copyCode?'checked':''}> Копировать код</label>
             <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-scroll" ${settings.scrollBottom?'checked':''}> Кнопка «вниз»</label>
             <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-counter" ${settings.charCounter?'checked':''}> Счётчик символов + контекст</label>
+            <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-inpcnt" ${settings.inputCounter?'checked':''}> Счётчик токенов в поле ввода</label>
+            <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-psave" ${settings.promptSave?'checked':''}> Автосохранение промптов</label>
+            <button id="ds-prompt-export" style="margin:4px 0; width:100%; background:#a97af7; color:#14161a; border:none; border-radius:6px; padding:5px; font-weight:bold; cursor:pointer; font-size:12px;">Экспорт всех промптов (.md)</button>
             <div style="margin:6px 0;"><label style="font-size:11px; color:#8a919b;">Лимит контекста (токенов):</label><br><input type="number" id="ds-ctx-limit" value="${settings.contextLimit||128000}" min="1000" step="1000" style="width:100%; background:#14161a; color:#e8eaed; border:1px solid rgba(169,122,247,0.3); border-radius:4px; padding:3px 6px; font-size:12px; box-sizing:border-box;"></div>
             <div style="margin:6px 0;"><label style="font-size:11px; color:#8a919b;">Порог предупреждения (%):</label><br><input type="number" id="ds-ctx-warn" value="${settings.contextWarn||70}" min="10" max="99" step="5" style="width:100%; background:#14161a; color:#e8eaed; border:1px solid rgba(169,122,247,0.3); border-radius:4px; padding:3px 6px; font-size:12px; box-sizing:border-box;"></div>
             <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-emoji" ${settings.emojiPicker?'checked':''}> Эмодзи-пикер</label>
@@ -441,6 +451,12 @@
         document.getElementById('ds-copy').onchange = (e) => { settings.copyCode = e.target.checked; save(); };
         document.getElementById('ds-scroll').onchange = (e) => { settings.scrollBottom = e.target.checked; save(); };
         document.getElementById('ds-counter').onchange = (e) => { settings.charCounter = e.target.checked; save(); };
+        var _inp = document.getElementById('ds-inpcnt');
+        if (_inp) _inp.onchange = (e) => { settings.inputCounter = e.target.checked; save(); updateInputCounter(); };
+        var _ps = document.getElementById('ds-psave');
+        if (_ps) _ps.onchange = (e) => { settings.promptSave = e.target.checked; save(); };
+        var _pe = document.getElementById('ds-prompt-export');
+        if (_pe) _pe.onclick = _promptExport;
         var _ctxLimitEl = document.getElementById('ds-ctx-limit');
         if (_ctxLimitEl) _ctxLimitEl.onchange = (e) => { var v = parseInt(e.target.value, 10); if (v > 0) { settings.contextLimit = v; save(); updateCharCounter(); } };
         var _ctxWarnEl = document.getElementById('ds-ctx-warn');
@@ -845,6 +861,78 @@
             _renderCtx(total, Math.round(total / 2.7), limit * 2.7, 'dom');
         }
     }
+
+    // --- v2.11: автосохранение промптов (GM_setValue) ---
+    var _PROMPT_KEY = 'ds_prompts_history';
+    var _PROMPT_MAX = 300;
+    function _promptHistory() {
+        try { return JSON.parse(GM_getValue(_PROMPT_KEY, '[]') || '[]'); } catch (e) { return []; }
+    }
+    function _promptPush(text, chatId) {
+        if (!settings.promptSave || !text || !text.trim()) return;
+        var txt = text.trim();
+        if (txt.length < 20) return;
+        var h = _promptHistory();
+        if (h.length && h[h.length-1].text === txt) return;
+        h.push({ at: Date.now(), chat_id: chatId || '', text: txt });
+        while (h.length > _PROMPT_MAX) h.shift();
+        try { GM_setValue(_PROMPT_KEY, JSON.stringify(h)); } catch (e) {}
+    }
+    function _promptExport() {
+        var h = _promptHistory();
+        if (!h.length) { alert('История промптов пуста'); return; }
+        var parts = ['# Промпты DeepSeek+', '', 'Всего: ' + h.length, ''];
+        for (var i = h.length-1; i >= 0; i--) {
+            var it = h[i];
+            var ts = new Date(it.at).toISOString().replace('T',' ').slice(0,19);
+            parts.push('## ' + ts + (it.chat_id ? ' | ' + it.chat_id : ''));
+            parts.push('');
+            parts.push(it.text);
+            parts.push('');
+        }
+        var blob = new Blob([parts.join(NL)], {type:'text/markdown;charset=utf-8'});
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'deepseek_prompts_' + new Date().toISOString().slice(0,10) + '.md';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+    }
+    function _promptHookTA() {
+        var ta = document.querySelector('textarea[placeholder], textarea');
+        if (!ta || ta.__dsPromptHooked) return;
+        ta.__dsPromptHooked = true;
+        ta.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' && !ev.shiftKey && !ev.ctrlKey && !ev.altKey) {
+                var txt = ta.value || '';
+                var cid = (location.pathname.match(/\/a\/chat\/s\/([a-f0-9-]+)/) || [])[1] || '';
+                _promptPush(txt, cid);
+            }
+        }, true);
+    }
+    setInterval(_promptHookTA, 800);
+
+    // --- v2.10: счётчик токенов в поле ввода ---
+    function updateInputCounter() {
+        var old = document.getElementById('ds-input-counter');
+        if (!settings.inputCounter) { if (old) old.remove(); return; }
+        var ta = document.querySelector('textarea[placeholder], textarea');
+        if (!ta) { if (old) old.remove(); return; }
+        var wrap = ta.parentElement;
+        if (!wrap) return;
+        var el = old;
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'ds-input-counter';
+            (document.body || document.documentElement).appendChild(el);
+        }
+        var txt = ta.value || ta.textContent || '';
+        var tok = Math.round(txt.length / 2.7);
+        el.textContent = '~' + (tok >= 1000 ? (tok/1000).toFixed(1)+'K' : tok) + ' tok';
+        el.classList.toggle('ds-iwarn', tok >= 4000 && tok < 8000);
+        el.classList.toggle('ds-ihard', tok >= 8000);
+    }
+    setInterval(updateInputCounter, 600);
+    updateInputCounter();
 
     // Кэш и загрузчик /health (мост Agent Bridge)
     var _ctxCache = { at: 0, data: null, inflight: false };
