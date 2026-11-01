@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.14
+// @version      2.15
 // @description  Монитор контекста (4 зоны цвета), счётчик токенов в поле ввода, автосохранение промптов + экспорт, ширина, шрифты, фон, неон, compact, поиск, брендинг, эмодзи
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
@@ -638,7 +638,12 @@
             modal.innerHTML = `
                 <h3 style="margin-top:0; color:#a97af7;">Обновления DeepSeek Tweaks</h3>
                 <div style="font-size:13px; line-height:1.6; margin-bottom:15px; max-height: 60vh; overflow-y: auto; padding-right: 6px; scrollbar-width: thin;">
-                    <b>v2.7 (Сейчас):</b><br>
+                    <b>v2.15 (Сейчас):</b><br>
+                    + 🟢🟡🟠🔴 Монитор контекста: 4 зоны цвета (зелёный <50%, жёлтый 50–75%, оранжевый 75–90%, красный ≥90%)<br>
+                    + 🔢 Счётчик токенов в поле ввода (~N tok)<br>
+                    + 💾 Автосохранение промптов (localStorage, история 300) + экспорт .md<br>
+                    + 🔧 Фикс: автообновление работает (убраны лишние @grant)<br><br>
+                    <b>v2.7 (было):</b><br>
                     + 🔧 фикс: кэш проверки обновлений 15 мин + сброс при старте<br>
                     + 🐾 мяу<br><br>
                     <b>v2.6:</b><br>
