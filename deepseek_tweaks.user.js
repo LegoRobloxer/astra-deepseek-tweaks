@@ -1,13 +1,11 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.13
+// @version      2.14
 // @description  Монитор контекста (4 зоны цвета), счётчик токенов в поле ввода, автосохранение промптов + экспорт, ширина, шрифты, фон, неон, compact, поиск, брендинг, эмодзи
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
 // @grant        GM_xmlhttpRequest
-// @grant        GM_setValue
-// @grant        GM_getValue
 // @connect      raw.githubusercontent.com
 // @connect      127.0.0.1
 // @connect      localhost
@@ -866,11 +864,11 @@
         }
     }
 
-    // --- v2.11: автосохранение промптов (GM_setValue) ---
+    // --- v2.11/v2.14: автосохранение промптов (localStorage, работает без @grant) ---
     var _PROMPT_KEY = 'ds_prompts_history';
     var _PROMPT_MAX = 300;
     function _promptHistory() {
-        try { return JSON.parse(GM_getValue(_PROMPT_KEY, '[]') || '[]'); } catch (e) { return []; }
+        try { return JSON.parse(localStorage.getItem(_PROMPT_KEY) || '[]') || []; } catch (e) { return []; }
     }
     function _promptPush(text, chatId) {
         if (!settings.promptSave || !text || !text.trim()) return;
@@ -880,7 +878,7 @@
         if (h.length && h[h.length-1].text === txt) return;
         h.push({ at: Date.now(), chat_id: chatId || '', text: txt });
         while (h.length > _PROMPT_MAX) h.shift();
-        try { GM_setValue(_PROMPT_KEY, JSON.stringify(h)); } catch (e) {}
+        try { localStorage.setItem(_PROMPT_KEY, JSON.stringify(h)); } catch (e) {}
     }
     function _promptExport() {
         var h = _promptHistory();
