@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.18
+// @version      2.19
 // @description  Монитор контекста (4 зоны цвета), счётчик токенов в поле ввода, автосохранение промптов + экспорт, ширина, шрифты, фон, неон, compact, поиск, брендинг, эмодзи
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
@@ -408,7 +408,7 @@
         if (document.getElementById('ds-tweaks-panel')) return;
         const panel = document.createElement('div');
         panel.id = 'ds-tweaks-panel';
-        panel.style.cssText = `position: fixed; right: 20px; top: 60px; z-index: 99999; background: #1e1e2e; color: #e8eaed; padding: 15px; border-radius: 12px; font-family: 'Segoe UI', sans-serif; font-size: 13px; width: 260px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: none; border: 1px solid rgba(169,122,247,0.3);`;
+        panel.style.cssText = `position: fixed; right: 20px; top: 60px; z-index: 99999; background: #1e1e2e; color: #e8eaed; padding: 15px; border-radius: 12px; font-family: 'Segoe UI', sans-serif; font-size: 13px; width: 260px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: none; border: 1px solid rgba(169,122,247,0.3); max-height: calc(100vh - 80px); overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #a97af7 #1e1e2e;`;
         panel.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><b style="color:#a97af7;">Настройки DeepSeek</b><span id="ds-close-panel" style="cursor:pointer; font-size:16px;">✕</span></div>
             <label style="display:block; margin:5px 0;"><input type="checkbox" id="ds-wide" ${settings.wideChat?'checked':''}> Широкий чат</label>
@@ -638,7 +638,10 @@
             modal.innerHTML = `
                 <h3 style="margin-top:0; color:#a97af7;">Обновления DeepSeek Tweaks</h3>
                 <div style="font-size:13px; line-height:1.6; margin-bottom:15px; max-height: 60vh; overflow-y: auto; padding-right: 6px; scrollbar-width: thin;">
-                    <b>v2.18 (Сейчас):</b><br>
+                    <b>v2.19 (Сейчас):</b><br>
+                    + 🖱 Скролл в панели настроек: max-height + overflow-y, нижние пункты теперь достать можно<br>
+                    + 🔧 scrollbar-width: thin, цвет в тон неону<br><br>
+                    <b>v2.18:</b><br>
                     + 🔔 Уведомление о конце генерации: тост + звук, если вкладка не в фокусе<br>
                     + 🕐 Таймстемпы: мелкое время у каждого сообщения<br>
                     + ⚡ Быстрые промпты: шаблоны в localStorage, вставка в 1 клик<br>
