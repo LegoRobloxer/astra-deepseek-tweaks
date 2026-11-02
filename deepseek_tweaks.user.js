@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.19
+// @version      2.20
 // @description  Монитор контекста (4 зоны цвета), счётчик токенов в поле ввода, автосохранение промптов + экспорт, ширина, шрифты, фон, неон, compact, поиск, брендинг, эмодзи
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
@@ -638,7 +638,10 @@
             modal.innerHTML = `
                 <h3 style="margin-top:0; color:#a97af7;">Обновления DeepSeek Tweaks</h3>
                 <div style="font-size:13px; line-height:1.6; margin-bottom:15px; max-height: 60vh; overflow-y: auto; padding-right: 6px; scrollbar-width: thin;">
-                    <b>v2.19 (Сейчас):</b><br>
+                    <b>v2.20 (Сейчас):</b><br>
+                    + 🔧 Быстрые промпты: вставка теперь через нативный сеттер React (раньше React игнорировал)<br>
+                    + 🛡 Если поле ввода не найдено — тост вместо тихого провала<br><br>
+                    <b>v2.19:</b><br>
                     + 🖱 Скролл в панели настроек: max-height + overflow-y, нижние пункты теперь достать можно<br>
                     + 🔧 scrollbar-width: thin, цвет в тон неону<br><br>
                     <b>v2.18:</b><br>
@@ -2214,13 +2217,48 @@
         function quickGet() { try { return JSON.parse(localStorage.getItem(K_QUICK) || '[]'); } catch (e) { return []; } }
         function quickSet(a) { try { localStorage.setItem(K_QUICK, JSON.stringify(a)); } catch (e) {} }
         function insertToTextarea(txt) {
-            var ta = document.querySelector('textarea');
-            if (!ta) return;
-            ta.focus();
-            var s = ta.selectionStart, e = ta.selectionEnd;
-            ta.value = ta.value.slice(0, s) + txt + ta.value.slice(e);
-            ta.selectionStart = ta.selectionEnd = s + txt.length;
-            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            // DeepSeek — React-контролируемое поле. Прямое присваивание value
+            // React игнорирует: нужен НАТИВНЫЙ сеттер + input/change.
+            // Как в insertEmojiToTextarea().
+            var el = (typeof findChatInput === 'function') ? findChatInput() : document.querySelector('textarea');
+            if (!el) { if (typeof dsToast === 'function') dsToast('Поле ввода не найдено', 'Кликни в чат и повтори', 'err'); return; }
+            el.focus();
+            if (el.tagName === 'TEXTAREA') {
+                var start = el.selectionStart != null ? el.selectionStart : el.value.length;
+                var end = el.selectionEnd != null ? el.selectionEnd : el.value.length;
+                var newVal = el.value.substring(0, start) + txt + el.value.substring(end);
+                try {
+                    var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+                    setter.call(el, newVal);
+                } catch (e) { el.value = newVal; }
+                var pos = start + txt.length;
+                try { el.selectionStart = el.selectionEnd = pos; } catch (e) {}
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                return;
+            }
+            // contenteditable
+            var sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0 || !el.contains(sel.anchorNode)) {
+                var range = document.createRange();
+                range.selectNodeContents(el);
+                range.collapse(false);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }
+            try {
+                if (!document.execCommand('insertText', false, txt)) {
+                    var r = sel.getRangeAt(0);
+                    r.deleteContents();
+                    var tn = document.createTextNode(txt);
+                    r.insertNode(tn);
+                    r.setStartAfter(tn);
+                    r.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                }
+            } catch (e) {}
+            el.dispatchEvent(new Event('input', { bubbles: true }));
         }
 
         // 4. Bookmarks
