@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.20
+// @version      2.21
 // @description  Монитор контекста (4 зоны цвета), счётчик токенов в поле ввода, автосохранение промптов + экспорт, ширина, шрифты, фон, неон, compact, поиск, брендинг, эмодзи
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
@@ -638,7 +638,11 @@
             modal.innerHTML = `
                 <h3 style="margin-top:0; color:#a97af7;">Обновления DeepSeek Tweaks</h3>
                 <div style="font-size:13px; line-height:1.6; margin-bottom:15px; max-height: 60vh; overflow-y: auto; padding-right: 6px; scrollbar-width: thin;">
-                    <b>v2.20 (Сейчас):</b><br>
+                    <b>v2.21 (Сейчас):</b><br>
+                    + 🔔 Уведомление: звук теперь ВСЕГДА (не только при скрытой вкладке), тост — только при скрытой<br>
+                    + 🔊 AudioContext разблокируется на первом клике (браузеры блокируют звук без жеста)<br>
+                    + 🐞 Диагностика: window.__dsNotifyDebug = true -> лог [ds-notify] в консоль<br><br>
+                    <b>v2.20:</b><br>
                     + 🔧 Быстрые промпты: вставка теперь через нативный сеттер React (раньше React игнорировал)<br>
                     + 🛡 Если поле ввода не найдено — тост вместо тихого провала<br><br>
                     <b>v2.19:</b><br>
@@ -2162,32 +2166,61 @@
         var prevStop = null;
         function isStopBtn(b) {
             if (!b) return false;
-            var d = b.querySelector && b.querySelector('svg path');
-            if (d && (d.getAttribute('d') || '').indexOf('M2 4.88') === 0) return true;
             var aria = (b.getAttribute && b.getAttribute('aria-label')) || '';
-            return /stop|останов/i.test(aria);
+            var title = (b.getAttribute && b.getAttribute('title')) || '';
+            var cls = (b.className && b.className.toString) ? b.className.toString() : '';
+            if (/stop|останов|стоп/i.test(aria + ' ' + title + ' ' + cls)) return true;
+            var d = b.querySelector && b.querySelector('svg path');
+            if (d) {
+                var dd = d.getAttribute('d') || '';
+                if (dd.indexOf('M2 4.88') === 0) return true;
+                if (dd.indexOf('M2 4.8') === 0) return true;
+            }
+            return false;
         }
         function findStop() { return qsa('button').filter(isStopBtn)[0] || null; }
-        function beep() {
+        var _actx = null;
+        function _ensureAudio() {
             try {
                 var AC = window.AudioContext || window.webkitAudioContext;
-                if (!AC) return;
-                var ctx = new AC();
+                if (!AC) return null;
+                if (!_actx) _actx = new AC();
+                if (_actx.state === 'suspended') _actx.resume();
+                return _actx;
+            } catch (e) { return null; }
+        }
+        // Разблокировка AudioContext на первом жесте (браузеры блокируют звук без клика).
+        try {
+            document.addEventListener('pointerdown', function() { _ensureAudio(); }, { once: true, capture: true });
+        } catch (e) {}
+        try {
+            document.addEventListener('keydown', function() { _ensureAudio(); }, { once: true, capture: true });
+        } catch (e) {}
+        function beep() {
+            try {
+                var ctx = _ensureAudio();
+                if (!ctx) return;
                 var o = ctx.createOscillator();
                 var g = ctx.createGain();
-                o.type = 'sine'; o.frequency.value = 880; g.gain.value = 0.06;
+                o.type = 'sine'; o.frequency.value = 880; g.gain.value = 0.08;
                 o.connect(g).connect(ctx.destination); o.start();
-                setTimeout(function() { try { o.stop(); ctx.close(); } catch (e) {} }, 220);
+                setTimeout(function() { try { o.stop(); } catch (e) {} }, 240);
             } catch (e) {}
         }
         function notifyEnd() {
             if (!CFG.notify) return;
-            if (!document.hidden) return;
+            // Звук — ВСЕГДА (не только при скрытой вкладке).
             beep();
-            if (typeof dsToast === 'function') dsToast('Ответ готов', 'DeepSeek+ ждёт тебя', 'ok');
+            // Тост — только если вкладка скрыта, чтобы не мешать в активной.
+            if (document.hidden && typeof dsToast === 'function') {
+                dsToast('Ответ готов', 'DeepSeek+ ждёт тебя', 'ok');
+            }
         }
         function tickNotify() {
             var st = !!findStop();
+            if (window.__dsNotifyDebug) {
+                try { console.log('[ds-notify] tick: stop=' + st + ' prev=' + prevStop + ' hidden=' + document.hidden); } catch (e) {}
+            }
             if (prevStop === true && st === false) notifyEnd();
             prevStop = st;
         }
@@ -2355,6 +2388,7 @@
                 '<label style="display:block;margin:4px 0;"><input type="checkbox" id="dsx-quick"> Быстрые промпты</label>' +
                 '<label style="display:block;margin:4px 0;"><input type="checkbox" id="dsx-bm"> Закладки</label>' +
                 '<label style="display:block;margin:4px 0;"><input type="checkbox" id="dsx-col"> Сворачивать длинные (&gt;2000)</label>' +
+                '<button id="dsx-beep" style="margin:4px 0;border:1px solid #a97af7;background:transparent;color:#a97af7;border-radius:8px;padding:2px 10px;cursor:pointer;font-size:12px;">🔊 Тест звука</button>' +
                 '<div style="margin-top:8px;"><div style="font-size:12px;color:#8a919b;">Быстрые промпты:</div>' +
                 '<textarea id="dsx-new" placeholder="текст шаблона" style="width:100%;height:40px;background:#14161a;color:#e8eaed;border:1px solid #2b3038;border-radius:6px;padding:4px;font-size:12px;"></textarea>' +
                 '<button id="dsx-add" style="margin-top:4px;border:1px solid #a97af7;background:transparent;color:#a97af7;border-radius:8px;padding:2px 10px;cursor:pointer;font-size:12px;">Добавить</button>' +
@@ -2372,6 +2406,7 @@
                 el.onchange = function(e) { CFG[key] = e.target.checked; cfgSet(CFG); };
             };
             cb('dsx-notify', 'notify'); cb('dsx-ts', 'timestamps'); cb('dsx-quick', 'quick'); cb('dsx-bm', 'bookmarks'); cb('dsx-col', 'collapseLong');
+            var _beepBtn = document.getElementById('dsx-beep'); if (_beepBtn) _beepBtn.onclick = function() { beep(); };
             var btnAdd = document.getElementById('dsx-add');
             if (btnAdd) btnAdd.onclick = function() {
                 var ta = document.getElementById('dsx-new');
