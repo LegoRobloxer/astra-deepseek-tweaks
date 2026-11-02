@@ -2240,6 +2240,8 @@
                 n.setAttribute(TS_ATTR, hhmm);
                 var span = document.createElement('div');
                 span.className = 'ds-msg-time';
+                span.setAttribute('data-ds-extra', '1');
+                span.setAttribute('aria-hidden', 'true');
                 span.textContent = hhmm;
                 span.style.cssText = 'font-size:10px;color:#8a919b;margin-top:4px;opacity:0.7;';
                 n.appendChild(span);
@@ -2314,6 +2316,8 @@
                     var t = (node.textContent || '').trim().slice(0, 200);
                     var btn = document.createElement('button');
                     btn.className = 'ds-bm-btn';
+                    btn.setAttribute('data-ds-extra', '1');
+                    btn.setAttribute('aria-hidden', 'true');
                     btn.title = 'Закладка';
                     btn.textContent = texts[t] ? '★' : '☆';
                     btn.style.cssText = 'position:absolute;top:4px;right:4px;border:0;background:transparent;color:#a97af7;font-size:16px;cursor:pointer;opacity:0.6;';
@@ -2356,6 +2360,8 @@
                 n.setAttribute(COL_ATTR, '1');
                 var wrap = document.createElement('div');
                 wrap.className = 'ds-col-wrap';
+                wrap.setAttribute('data-ds-extra', '1');
+                wrap.setAttribute('aria-hidden', 'true');
                 wrap.style.cssText = 'max-height:300px;overflow:hidden;position:relative;';
                 while (n.firstChild && !STOP_CLASS[n.firstChild.className || '']) {
                     wrap.appendChild(n.firstChild);
@@ -2363,6 +2369,8 @@
                 n.insertBefore(wrap, n.firstChild);
                 var btn = document.createElement('button');
                 btn.className = 'ds-col-btn';
+                btn.setAttribute('data-ds-extra', '1');
+                btn.setAttribute('aria-hidden', 'true');
                 btn.textContent = 'Развернуть';
                 btn.style.cssText = 'display:block;margin:6px auto 0;border:1px solid #a97af7;background:transparent;color:#a97af7;border-radius:12px;padding:2px 12px;cursor:pointer;font-size:12px;';
                 btn.onclick = function() {
