@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSeek Tweaks by Astra
 // @namespace    http://tampermonkey.net/
-// @version      2.16
+// @version      2.18
 // @description  Монитор контекста (4 зоны цвета), счётчик токенов в поле ввода, автосохранение промптов + экспорт, ширина, шрифты, фон, неон, compact, поиск, брендинг, эмодзи
 // @author       Astra-Ti
 // @match        https://chat.deepseek.com/*
@@ -638,7 +638,15 @@
             modal.innerHTML = `
                 <h3 style="margin-top:0; color:#a97af7;">Обновления DeepSeek Tweaks</h3>
                 <div style="font-size:13px; line-height:1.6; margin-bottom:15px; max-height: 60vh; overflow-y: auto; padding-right: 6px; scrollbar-width: thin;">
-                    <b>v2.15 (Сейчас):</b><br>
+                    <b>v2.18 (Сейчас):</b><br>
+                    + 🔔 Уведомление о конце генерации: тост + звук, если вкладка не в фокусе<br>
+                    + 🕐 Таймстемпы: мелкое время у каждого сообщения<br>
+                    + ⚡ Быстрые промпты: шаблоны в localStorage, вставка в 1 клик<br>
+                    + ★ Закладки на сообщения: звёздочка, список в панели, скролл к закладке<br>
+                    + 📊 Статистика чата: сообщений, средняя, самая длинная, всего<br>
+                    + 📦 Сворачивание длинных ответов (2000+ символов) + кнопка «развернуть»<br>
+                    + 🔧 Фикс: «Экспорт промптов» больше не падает (NL is not defined)<br><br>
+                    <b>v2.15:</b><br>
                     + 🟢🟡🟠🔴 Монитор контекста: 4 зоны цвета (зелёный <50%, жёлтый 50–75%, оранжевый 75–90%, красный ≥90%)<br>
                     + 🔢 Счётчик токенов в поле ввода (~N tok)<br>
                     + 💾 Автосохранение промптов (localStorage, история 300) + экспорт .md<br>
@@ -904,7 +912,7 @@
             parts.push(it.text);
             parts.push('');
         }
-        var blob = new Blob([parts.join(NL)], {type:'text/markdown;charset=utf-8'});
+        var blob = new Blob([parts.join('\n')], {type:'text/markdown;charset=utf-8'});
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = 'deepseek_prompts_' + new Date().toISOString().slice(0,10) + '.md';
@@ -2116,5 +2124,283 @@
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();
+
+    // ===== v2.18: DeepSeek+ Extras (independent module) =====
+    (function() {
+        var NS = 'ds_extra_';
+        var K_QUICK = NS + 'quick_prompts';
+        var K_BOOK_PREFIX = NS + 'bookmarks_';
+        var K_CFG = NS + 'cfg';
+
+        function cfgGet() { try { return JSON.parse(localStorage.getItem(K_CFG) || '{}'); } catch (e) { return {}; } }
+        function cfgSet(o) { try { localStorage.setItem(K_CFG, JSON.stringify(o)); } catch (e) {} }
+        var CFG = cfgGet();
+        if (CFG.notify === undefined) CFG.notify = true;
+        if (CFG.timestamps === undefined) CFG.timestamps = true;
+        if (CFG.quick === undefined) CFG.quick = true;
+        if (CFG.bookmarks === undefined) CFG.bookmarks = true;
+        if (CFG.collapseLong === undefined) CFG.collapseLong = true;
+        if (CFG.collapseThreshold === undefined) CFG.collapseThreshold = 2000;
+        cfgSet(CFG);
+
+        function chatId() {
+            var p = location.pathname || '';
+            var k = '/a/chat/s/';
+            var i = p.indexOf(k);
+            if (i < 0) return 'default';
+            return p.slice(i + k.length).split('/')[0] || 'default';
+        }
+        function qsa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+
+        // 1. Notification on generation end
+        var prevStop = null;
+        function isStopBtn(b) {
+            if (!b) return false;
+            var d = b.querySelector && b.querySelector('svg path');
+            if (d && (d.getAttribute('d') || '').indexOf('M2 4.88') === 0) return true;
+            var aria = (b.getAttribute && b.getAttribute('aria-label')) || '';
+            return /stop|останов/i.test(aria);
+        }
+        function findStop() { return qsa('button').filter(isStopBtn)[0] || null; }
+        function beep() {
+            try {
+                var AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return;
+                var ctx = new AC();
+                var o = ctx.createOscillator();
+                var g = ctx.createGain();
+                o.type = 'sine'; o.frequency.value = 880; g.gain.value = 0.06;
+                o.connect(g).connect(ctx.destination); o.start();
+                setTimeout(function() { try { o.stop(); ctx.close(); } catch (e) {} }, 220);
+            } catch (e) {}
+        }
+        function notifyEnd() {
+            if (!CFG.notify) return;
+            if (!document.hidden) return;
+            beep();
+            if (typeof dsToast === 'function') dsToast('Ответ готов', 'DeepSeek+ ждёт тебя', 'ok');
+        }
+        function tickNotify() {
+            var st = !!findStop();
+            if (prevStop === true && st === false) notifyEnd();
+            prevStop = st;
+        }
+
+        // 2. Timestamps
+        var TS_ATTR = 'data-ds-ts';
+        function tickTimestamps() {
+            if (!CFG.timestamps) return;
+            var nodes = qsa('.ds-markdown');
+            var now = new Date();
+            var hh = String(now.getHours()); if (hh.length < 2) hh = '0' + hh;
+            var mm = String(now.getMinutes()); if (mm.length < 2) mm = '0' + mm;
+            var hhmm = hh + ':' + mm;
+            for (var i = 0; i < nodes.length; i++) {
+                var n = nodes[i];
+                if (n.getAttribute(TS_ATTR)) continue;
+                n.setAttribute(TS_ATTR, hhmm);
+                var span = document.createElement('div');
+                span.className = 'ds-msg-time';
+                span.textContent = hhmm;
+                span.style.cssText = 'font-size:10px;color:#8a919b;margin-top:4px;opacity:0.7;';
+                n.appendChild(span);
+            }
+        }
+
+        // 3. Quick prompts
+        function quickGet() { try { return JSON.parse(localStorage.getItem(K_QUICK) || '[]'); } catch (e) { return []; } }
+        function quickSet(a) { try { localStorage.setItem(K_QUICK, JSON.stringify(a)); } catch (e) {} }
+        function insertToTextarea(txt) {
+            var ta = document.querySelector('textarea');
+            if (!ta) return;
+            ta.focus();
+            var s = ta.selectionStart, e = ta.selectionEnd;
+            ta.value = ta.value.slice(0, s) + txt + ta.value.slice(e);
+            ta.selectionStart = ta.selectionEnd = s + txt.length;
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        // 4. Bookmarks
+        function bmKey() { return K_BOOK_PREFIX + chatId(); }
+        function bmGet() { try { return JSON.parse(localStorage.getItem(bmKey()) || '[]'); } catch (e) { return []; } }
+        function bmSet(a) { try { localStorage.setItem(bmKey(), JSON.stringify(a)); } catch (e) {} }
+        var BM_ATTR = 'data-ds-bm';
+        function tickBookmarks() {
+            if (!CFG.bookmarks) return;
+            var list = bmGet();
+            var texts = {};
+            for (var i = 0; i < list.length; i++) texts[list[i].t] = 1;
+            var nodes = qsa('.ds-markdown');
+            for (var j = 0; j < nodes.length; j++) {
+                var n = nodes[j];
+                if (n.getAttribute(BM_ATTR)) continue;
+                n.setAttribute(BM_ATTR, '1');
+                n.style.position = n.style.position || 'relative';
+                (function(node) {
+                    var t = (node.textContent || '').trim().slice(0, 200);
+                    var btn = document.createElement('button');
+                    btn.className = 'ds-bm-btn';
+                    btn.title = 'Закладка';
+                    btn.textContent = texts[t] ? '★' : '☆';
+                    btn.style.cssText = 'position:absolute;top:4px;right:4px;border:0;background:transparent;color:#a97af7;font-size:16px;cursor:pointer;opacity:0.6;';
+                    btn.onclick = function(e) {
+                        e.stopPropagation();
+                        var cur = bmGet();
+                        var idx = -1;
+                        for (var k = 0; k < cur.length; k++) { if (cur[k].t === t) { idx = k; break; } }
+                        if (idx >= 0) { cur.splice(idx, 1); btn.textContent = '☆'; }
+                        else { cur.push({ t: t, at: Date.now() }); btn.textContent = '★'; }
+                        bmSet(cur); renderBookmarks();
+                    };
+                    node.appendChild(btn);
+                })(n);
+            }
+        }
+
+        // 5. Stats
+        function computeStats() {
+            var nodes = qsa('.ds-markdown');
+            var total = 0, max = 0;
+            for (var i = 0; i < nodes.length; i++) {
+                var L = (nodes[i].textContent || '').length;
+                total += L; if (L > max) max = L;
+            }
+            var avg = nodes.length ? Math.round(total / nodes.length) : 0;
+            return { count: nodes.length, total: total, avg: avg, max: max };
+        }
+
+        // 6. Collapse long
+        var COL_ATTR = 'data-ds-col';
+        var STOP_CLASS = { 'ds-msg-time': 1, 'ds-bm-btn': 1, 'ds-col-btn': 1 };
+        function tickCollapse() {
+            if (!CFG.collapseLong) return;
+            var nodes = qsa('.ds-markdown');
+            for (var i = 0; i < nodes.length; i++) {
+                var n = nodes[i];
+                if (n.getAttribute(COL_ATTR)) continue;
+                if ((n.textContent || '').length < CFG.collapseThreshold) continue;
+                n.setAttribute(COL_ATTR, '1');
+                var wrap = document.createElement('div');
+                wrap.className = 'ds-col-wrap';
+                wrap.style.cssText = 'max-height:300px;overflow:hidden;position:relative;';
+                while (n.firstChild && !STOP_CLASS[n.firstChild.className || '']) {
+                    wrap.appendChild(n.firstChild);
+                }
+                n.insertBefore(wrap, n.firstChild);
+                var btn = document.createElement('button');
+                btn.className = 'ds-col-btn';
+                btn.textContent = 'Развернуть';
+                btn.style.cssText = 'display:block;margin:6px auto 0;border:1px solid #a97af7;background:transparent;color:#a97af7;border-radius:12px;padding:2px 12px;cursor:pointer;font-size:12px;';
+                btn.onclick = function() {
+                    var open = wrap.style.maxHeight === 'none';
+                    wrap.style.maxHeight = open ? '300px' : 'none';
+                    btn.textContent = open ? 'Развернуть' : 'Свернуть';
+                };
+                n.appendChild(btn);
+            }
+        }
+
+        // Panel
+        function ensurePanel() {
+            var panel = document.getElementById('ds-tweaks-panel');
+            if (!panel) return;
+            if (document.getElementById('ds-extra-section')) return;
+            var sec = document.createElement('div');
+            sec.id = 'ds-extra-section';
+            sec.style.cssText = 'margin-top:14px;padding-top:10px;border-top:1px solid #2b3038;';
+            sec.innerHTML = '<div style="font-weight:600;color:#a97af7;margin-bottom:8px;">✦ DeepSeek+ Extras</div>' +
+                '<label style="display:block;margin:4px 0;"><input type="checkbox" id="dsx-notify"> Уведомление о конце (звук+тост)</label>' +
+                '<label style="display:block;margin:4px 0;"><input type="checkbox" id="dsx-ts"> Время у сообщений</label>' +
+                '<label style="display:block;margin:4px 0;"><input type="checkbox" id="dsx-quick"> Быстрые промпты</label>' +
+                '<label style="display:block;margin:4px 0;"><input type="checkbox" id="dsx-bm"> Закладки</label>' +
+                '<label style="display:block;margin:4px 0;"><input type="checkbox" id="dsx-col"> Сворачивать длинные (&gt;2000)</label>' +
+                '<div style="margin-top:8px;"><div style="font-size:12px;color:#8a919b;">Быстрые промпты:</div>' +
+                '<textarea id="dsx-new" placeholder="текст шаблона" style="width:100%;height:40px;background:#14161a;color:#e8eaed;border:1px solid #2b3038;border-radius:6px;padding:4px;font-size:12px;"></textarea>' +
+                '<button id="dsx-add" style="margin-top:4px;border:1px solid #a97af7;background:transparent;color:#a97af7;border-radius:8px;padding:2px 10px;cursor:pointer;font-size:12px;">Добавить</button>' +
+                '<div id="dsx-list" style="margin-top:6px;"></div></div>' +
+                '<div style="margin-top:8px;"><div style="font-size:12px;color:#8a919b;">Статистика:</div>' +
+                '<div id="dsx-stats" style="font-size:12px;color:#e8eaed;"></div>' +
+                '<button id="dsx-stats-refresh" style="margin-top:4px;border:1px solid #a97af7;background:transparent;color:#a97af7;border-radius:8px;padding:2px 10px;cursor:pointer;font-size:12px;">Обновить</button></div>' +
+                '<div style="margin-top:8px;"><div style="font-size:12px;color:#8a919b;">Закладки:</div>' +
+                '<div id="dsx-bms" style="font-size:12px;color:#e8eaed;"></div></div>';
+            panel.appendChild(sec);
+            var cb = function(id, key) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                el.checked = !!CFG[key];
+                el.onchange = function(e) { CFG[key] = e.target.checked; cfgSet(CFG); };
+            };
+            cb('dsx-notify', 'notify'); cb('dsx-ts', 'timestamps'); cb('dsx-quick', 'quick'); cb('dsx-bm', 'bookmarks'); cb('dsx-col', 'collapseLong');
+            var btnAdd = document.getElementById('dsx-add');
+            if (btnAdd) btnAdd.onclick = function() {
+                var ta = document.getElementById('dsx-new');
+                var v = (ta.value || '').trim(); if (!v) return;
+                var a = quickGet(); a.push(v); quickSet(a); ta.value = ''; renderQuick();
+            };
+            var btnStat = document.getElementById('dsx-stats-refresh');
+            if (btnStat) btnStat.onclick = renderStats;
+            renderQuick(); renderBookmarks(); renderStats();
+        }
+        function renderQuick() {
+            var box = document.getElementById('dsx-list'); if (!box) return;
+            var a = quickGet(); box.innerHTML = '';
+            if (!a.length) { box.innerHTML = '<div style="color:#8a919b;">пусто</div>'; return; }
+            a.forEach(function(txt, i) {
+                var row = document.createElement('div');
+                row.style.cssText = 'display:flex;gap:4px;align-items:center;margin:2px 0;';
+                var b = document.createElement('button');
+                b.textContent = txt.slice(0, 40) + (txt.length > 40 ? '…' : '');
+                b.style.cssText = 'flex:1;text-align:left;border:1px solid #2b3038;background:#14161a;color:#e8eaed;border-radius:6px;padding:2px 6px;font-size:12px;cursor:pointer;';
+                b.onclick = function() { insertToTextarea(txt); };
+                var del = document.createElement('button');
+                del.textContent = '✕';
+                del.style.cssText = 'border:0;background:transparent;color:#e05a6a;cursor:pointer;font-size:12px;';
+                del.onclick = function() { var a2 = quickGet(); a2.splice(i, 1); quickSet(a2); renderQuick(); };
+                row.appendChild(b); row.appendChild(del); box.appendChild(row);
+            });
+        }
+        function renderBookmarks() {
+            var box = document.getElementById('dsx-bms'); if (!box) return;
+            var a = bmGet(); box.innerHTML = '';
+            if (!a.length) { box.innerHTML = '<div style="color:#8a919b;">пусто</div>'; return; }
+            a.forEach(function(bm, i) {
+                var row = document.createElement('div');
+                row.style.cssText = 'display:flex;gap:4px;align-items:center;margin:2px 0;';
+                var b = document.createElement('button');
+                b.textContent = bm.t.slice(0, 50) + (bm.t.length > 50 ? '…' : '');
+                b.style.cssText = 'flex:1;text-align:left;border:1px solid #2b3038;background:#14161a;color:#e8eaed;border-radius:6px;padding:2px 6px;font-size:12px;cursor:pointer;';
+                b.onclick = function() {
+                    var nodes = qsa('.ds-markdown');
+                    for (var k = 0; k < nodes.length; k++) {
+                        if ((nodes[k].textContent || '').trim().slice(0, 200) === bm.t) {
+                            nodes[k].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            break;
+                        }
+                    }
+                };
+                var del = document.createElement('button');
+                del.textContent = '✕';
+                del.style.cssText = 'border:0;background:transparent;color:#e05a6a;cursor:pointer;font-size:12px;';
+                del.onclick = function() { var a2 = bmGet(); a2.splice(i, 1); bmSet(a2); renderBookmarks(); };
+                row.appendChild(b); row.appendChild(del); box.appendChild(row);
+            });
+        }
+        function renderStats() {
+            var box = document.getElementById('dsx-stats'); if (!box) return;
+            var s = computeStats();
+            box.textContent = 'сообщений: ' + s.count + ' · средняя: ' + s.avg + ' симв · самая длинная: ' + s.max + ' симв · всего: ' + s.total;
+        }
+
+        function tick() {
+            tickNotify();
+            if (CFG.collapseLong) tickCollapse();
+            if (CFG.timestamps) tickTimestamps();
+            if (CFG.bookmarks) tickBookmarks();
+            ensurePanel();
+        }
+
+        setTimeout(tick, 2000);
+        setInterval(tick, 1500);
+    })();
 
 })();
